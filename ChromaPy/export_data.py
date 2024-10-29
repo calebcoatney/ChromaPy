@@ -1,4 +1,4 @@
-from .raw_data import RawData
+from ChromaPy.raw_data import RawData
 import tkinter as tk
 import customtkinter as ctk
 import csv
@@ -41,11 +41,11 @@ class ExportDataDialog(ctk.CTkToplevel):
 
     def select_export_location(self):
         """Open a file dialog for the user to choose the export location."""
-        if self.file_type_var.get() == "csv":
+        if self.file_type_var.get() == ".csv":
             filetypes = [("CSV files", "*.csv")]
-        elif self.file_type_var.get() == "json":
+        elif self.file_type_var.get() == ".json":
             filetypes = [("JSON files", "*.json")]
-        elif self.file_type_var.get() == "xlsx":
+        elif self.file_type_var.get() == ".xlsx":
             filetypes = [("Excel files", "*.xlsx")]
         else:
             filetypes = []
@@ -62,11 +62,11 @@ class ExportDataDialog(ctk.CTkToplevel):
         data = self.data_handler.raw_data
 
         # Export to CSV, JSON, or XLSX based on user selection
-        if self.file_type_var.get() == "csv":
+        if self.file_type_var.get() == ".csv":
             self.export_to_csv(data)
-        elif self.file_type_var.get() == "json":
+        elif self.file_type_var.get() == ".json":
             self.export_to_json(data)
-        elif self.file_type_var.get() == "xlsx":
+        elif self.file_type_var.get() == ".xlsx":
             self.export_to_xlsx(data)
         else:
             tk.messagebox.showinfo(f'File type "{self.file_type_var.get()}" is not supported')

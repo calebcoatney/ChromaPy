@@ -9,6 +9,7 @@ import customtkinter as ctk
 import numpy as np
 import threading
 
+
 class App(ctk.CTk):
     def __init__(self, processor: Processor):
         super().__init__()
@@ -171,7 +172,7 @@ class App(ctk.CTk):
 
         # Smoothing Kernel Size Slider
         self.kernel_size_slider = ctk.CTkSlider(
-            smoothing_frame, from_=1, to=20, command=self.update_preprocessing_parameters)
+            smoothing_frame, from_=1, to=35, command=self.update_preprocessing_parameters)
         self.kernel_size_slider.set(5)  # Default value
         self.kernel_size_slider.pack(pady=5)
         ctk.CTkLabel(smoothing_frame, text="Kernel Size").pack(pady=5)

@@ -8,6 +8,7 @@ from scipy.signal import savgol_filter, medfilt
 from scipy.interpolate import splrep, splev
 from scipy.integrate import simpson
 
+
 class Processor:
 
     def __init__(self, DataHandler: DataHandler = None):
@@ -34,10 +35,6 @@ class Processor:
                 compound = key
 
         return compound
-
-    '''
-    THIS NEEDS TO TAKE IN A PREPROCESSING PARAMETERS DICTIONARY
-    '''
 
     def find_baseline(self, y, x, preprocessing_parameters: dict):
         baseline_distance = preprocessing_parameters['baseline'].get('distance')
@@ -295,7 +292,7 @@ class Processor:
         y_peaks = []
         baseline_peaks = []
 
-        # Iterate through the filtered peaks from preprocess and integrate
+        # Iterate through each peak for integration
         for i, (apex_x, apex_y) in enumerate(zip(peaks_x, peaks_y)):
             # Find the index of the apex in x and y arrays
             peak_idx = np.where(x == apex_x)[0][0]
@@ -303,19 +300,51 @@ class Processor:
 
             # Calculate vertical distance between apex and baseline
             vertical_distance = apex_y - baseline_at_apex
-            threshold = vertical_distance * 0.0025  # 0.25% threshold
+            threshold = vertical_distance * 0.0025  # 0.25% threshold for signal proximity to baseline
 
-            # Initialize left and right bounds at the apex
+            # Initialize left and right bounds based on peak apex
             left_bound = peak_idx
             right_bound = peak_idx
 
-            # Move left from the apex until the threshold condition is met
-            while left_bound > 0 and (y[left_bound] - baseline_y[left_bound]) > threshold:
-                left_bound -= 1
+            dx = 25
 
-            # Move right from the apex until the threshold condition is met
-            while right_bound < len(y) - 1 and (y[right_bound] - baseline_y[right_bound]) > threshold:
-                right_bound += 1
+            # Calculate the left bound using both threshold and slope sign changes with foward difference approximation
+            previous_slope = None
+            for j in range(peak_idx, 2, -1):
+                diff = y[j] - baseline_y[j]
+
+                # Central difference approximation
+                if j >= dx and j < len(y) - dx:
+                    slope = (y[j] - y[j - dx]) / (x[j] - x[j - dx])
+                else:
+                    # Edge case fallback to first-order difference
+                    slope = (y[j] - y[j - 1]) / (x[j] - x[j - 1])
+
+                # Check for either diff threshold or slope zero-crossing
+                if diff <= threshold or (previous_slope is not None and np.sign(slope) != np.sign(previous_slope)):
+                    left_bound = j
+                    break
+
+                previous_slope = slope
+
+            # Calculate the right bound similarly with forward difference approximation
+            previous_slope = None
+            for j in range(peak_idx, len(y) - 3):
+                diff = y[j] - baseline_y[j]
+
+                # Central difference approximation
+                if j >= dx and j < len(y) - dx:
+                    slope = (y[j + dx] - y[j]) / (x[j + dx] - x[j])
+                else:
+                    # Edge case fallback to first-order difference
+                    slope = (y[j + 1] - y[j]) / (x[j + 1] - x[j])
+
+                # Check for either diff threshold or slope zero-crossing
+                if diff <= threshold or (previous_slope is not None and np.sign(slope) != np.sign(previous_slope)):
+                    right_bound = j
+                    break
+
+                previous_slope = slope
 
             # Append retention time at the peak (apex)
             ret_times.append(apex_x)
@@ -335,8 +364,7 @@ class Processor:
             # Calculate the integrated area using Simpson's rule
             area = simpson(y_peak_corrected, x=x_peak)
 
-            # To match the integrated areas and RFs from MSD Productivity ChemStation for GC3, a
-            # correction factor is needed. Update default value as necessary in method parameters.
+            # Apply correction factor
             area *= chemstation_area_factor
 
             # Store integrated area and bounds
@@ -353,7 +381,7 @@ class Processor:
             width = end_time - start_time
 
             peaks_list.append(Peak(compound_id, peak_number, retention_time,
-                              integrator, width, area, start_time, end_time))
+                                   integrator, width, area, start_time, end_time))
 
         if verbose:
             headers = ['Compound ID', 'Peak #', 'Ret Time',
@@ -370,6 +398,5 @@ class Processor:
             'retention_times': ret_times,
             'integrated_areas': integrated_areas,
             'integration_bounds': integration_bounds,
-            'peaks_list': peaks_list,
-            # 'processed_sample': processed_sample
+            'peaks_list': peaks_list
         }
