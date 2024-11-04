@@ -28,8 +28,10 @@ class App(ctk.CTk):
             },
             "baseline": {
                 "is_baseline_corrected": False,
-                "distance": None,
-                "prominence": 50
+                "distance": 10,
+                "prominence": 50,
+                "window": 15,
+                "threshold": 25,
             },
             "peak": {
                 "min prominence": None,
@@ -49,7 +51,7 @@ class App(ctk.CTk):
         self._configure_window()
         self._create_widgets()
 
-        self.load_samples(detector='TCD2B', sample=10)
+        self.load_samples()
 
     def _configure_window(self):
         """Configure the main window settings."""
@@ -195,6 +197,22 @@ class App(ctk.CTk):
             baseline_frame, text="Subtract Baseline", command=self.toggle_subtract_baseline)
         self.baseline_switch.pack(pady=10)
 
+        # Baseline Window Slider
+        self.baseline_window_slider = ctk.CTkSlider(
+            baseline_frame, from_=1, to=50, command=self.update_preprocessing_parameters)
+        self.baseline_window_slider.set(15)  # Default value
+        self.baseline_window_slider.pack(pady=5)
+        ctk.CTkLabel(baseline_frame, text="Baseline Window").pack(pady=5)
+
+        
+        # Baseline Threshold Slider
+        self.baseline_threshold_slider = ctk.CTkSlider(
+            baseline_frame, from_=1, to=25, command=self.update_preprocessing_parameters)
+        self.baseline_threshold_slider.set(5)  # Default value
+        self.baseline_threshold_slider.pack(pady=5)
+        ctk.CTkLabel(baseline_frame, text="Baseline Threshold").pack(pady=5)
+
+        '''
         # Baseline Distance Slider
         self.baseline_distance_slider = ctk.CTkSlider(
             baseline_frame, from_=0, to=100, command=self.update_preprocessing_parameters)
@@ -208,6 +226,7 @@ class App(ctk.CTk):
         self.baseline_prominence_slider.set(50)  # Default value
         self.baseline_prominence_slider.pack(pady=5)
         ctk.CTkLabel(baseline_frame, text="Baseline Prominence").pack(pady=5)
+        '''
 
         # Peaks Section
         peaks_frame = ctk.CTkFrame(self.parameters_frame)
@@ -288,15 +307,13 @@ class App(ctk.CTk):
         """Load and display the chromatogram in the plot frame."""
         self.update_sliders()
 
-        # Extract time and signal values
-        x, y = raw_data.time_values, raw_data.signal_values
-        if self.is_smooth:
-            y = self.Processor.smooth(y)
+        preprocessed_data = self.Processor.preprocess(raw_data, self.preprocessing_parameters)
 
-        baseline_y = self.Processor.find_baseline(y, x, self.preprocessing_parameters)
-        peaks_x, peaks_y = self.Processor.find_peaks(
-            y, x, {'peak_prominence': (self.preprocessing_parameters['peak']['min prominence'],
-                                       self.preprocessing_parameters['peak']['max prominence'])})
+        x = preprocessed_data['x']
+        y = preprocessed_data['y']
+        baseline_y = preprocessed_data['baseline_y']
+        peaks_x = preprocessed_data['peaks_x']
+        peaks_y = preprocessed_data['peaks_y']
 
         # Clear and plot new data
         self._clear_plot()
@@ -351,11 +368,19 @@ class App(ctk.CTk):
             "kernel_size": self.kernel_size_slider.get(),
             "window_length": self.window_length_slider.get()
         }
+        '''
         self.preprocessing_parameters["baseline"] = {
             "is_baseline_corrected": self.is_baseline_corrected,
             "distance": self.baseline_distance_slider.get(),
             "prominence": self.baseline_prominence_slider.get()
         }
+        '''
+        self.preprocessing_parameters["baseline"] = {
+            "is_baseline_corrected": self.is_baseline_corrected,
+            "window": int(self.baseline_window_slider.get()),
+            "threshold": self.baseline_threshold_slider.get()
+        }
+
         self.preprocessing_parameters["peak"] = {
             "min prominence": self.min_peak_prominence_slider.get(),
             "max prominence": self.max_peak_prominence_slider.get()
@@ -367,7 +392,7 @@ class App(ctk.CTk):
         self.update_plot(results)
 
     def update_sliders(self, verbose: bool = False):
-
+        '''
         baseline_distance_limits = self.Processor.get_baseline_limits(
             self.current_sample, self.preprocessing_parameters)
         if self.baseline_distance_slider.get() > baseline_distance_limits[1]:
@@ -376,6 +401,7 @@ class App(ctk.CTk):
         self.baseline_distance_slider.configure(require_redraw=True,
                                                 from_=baseline_distance_limits[0],
                                                 to=baseline_distance_limits[1])
+        '''
 
         # This may not be necessary, causes issues during automated integration
         max_peak_prominence = self.Processor.get_max_peak_prominence(
@@ -462,15 +488,28 @@ class App(ctk.CTk):
         if not self.automation_enabled:
             self.integrate_button.configure(state='enabled')
 
-    def load_samples(self, detector: str = 'FID1A', sample: int = 1):
-        if detector in self.Processor.DataHandler.raw_data.keys():
-            self.current_detector = detector
+    def load_samples(self, detector: str = None, sample: int = 1):
+        # Check if the detector is provided
+        if detector:
+            if detector in self.Processor.DataHandler.raw_data:
+                self.current_detector = detector
+                print(self.current_detector)
+                print(self.Processor.DataHandler.raw_data.keys())
+            else:
+                raise ValueError(f"Detector '{detector}' not found in raw data.")
         else:
-            raise ValueError(f"Detector {detector} not found in raw data.")
+            # Look for the first populated detector if no specific one is provided
+            for det, samples in self.Processor.DataHandler.raw_data.items():
+                if isinstance(samples, dict) and samples:  # Check if samples is a non-empty dictionary
+                    self.current_detector = det
+                    print(f"Using first populated detector: {self.current_detector}")
+                    break
+            else:
+                raise ValueError("No populated detector found in raw data.")
 
         # Extract sample keys from the specified detector
         self.sample_keys = list(
-            self.Processor.DataHandler.raw_data[detector].keys())
+            self.Processor.DataHandler.raw_data[self.current_detector].keys())
 
         # Set current sample index and load the corresponding sample
         self.current_sample_index = sample - 1  # Make sample index 0-based
@@ -478,6 +517,8 @@ class App(ctk.CTk):
             self.current_sample = self.Processor.DataHandler.raw_data[self.current_detector][
                 self.sample_keys[self.current_sample_index]]
         else:
+            print(f'self.current_sample_index: {self.current_sample_index}')
+            print(f'len(self.sample_keys): {len(self.sample_keys)}')
             raise IndexError(f"Sample index {sample} is out of range.")
 
         self.load_chromatogram(self.current_sample)

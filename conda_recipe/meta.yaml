@@ -1,0 +1,36 @@
+package:
+  name: chromapy  # Use the lowercase package name
+  version: 1.0.0
+
+source:
+  path: ..  # Assuming your package is in the parent directory
+
+build:
+  script: python setup.py install  # Use setup.py for the build process
+
+requirements:
+  build:
+    - python
+    - setuptools
+  pip:
+    - python >=3.11
+    - matplotlib ==3.9.2
+    - customtkinter ==5.2.2
+    - pandas ==2.2.3
+    - numpy ==2.1.2
+    - tabulate ==0.9.0
+    - scipy ==1.14.1
+    - openpyxl ==3.1.5
+
+about:
+  home: https://github.com/calebcoatney/ChromaPy
+  license: MIT
+  summary: "A customtkinter app for processing gas chromatography data."
+  description: |
+    A customtkinter application designed for processing and analyzing gas chromatography data. This tool integrates various data processing functionalities and provides a user-friendly interface.
+  keywords:
+    - gas chromatography
+    - data processing
+    - customtkinter
+  maintainer: Caleb Coatney
+  maintainer_email: Caleb.Coatney@nrel.gov

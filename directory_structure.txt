@@ -1,0 +1,42 @@
+Folder PATH listing for volume C_Drive
+Volume serial number is 6C40-2CEA
+C:.
+³   .gitignore
+³   directory.txt
+³   directory_structure.txt
+³   LICENSE
+³   main.py
+³   README.md
+³   requirements.txt
+³   setup.py
+³   
+ÃÄÄÄ.vscode
+ÃÄÄÄChromaPy
+³   ³   app.py
+³   ³   data_handler.py
+³   ³   export_data.py
+³   ³   peak.py
+³   ³   processor.py
+³   ³   raw_data.py
+³   ³   rt_table.py
+³   ³   __init__.py
+³   ³   
+³   ÀÄÄÄ__pycache__
+³           app.cpython-311.pyc
+³           data_handler.cpython-311.pyc
+³           export_data.cpython-311.pyc
+³           peak.cpython-311.pyc
+³           processor.cpython-311.pyc
+³           raw_data.cpython-311.pyc
+³           rt_table.cpython-311.pyc
+³           __init__.cpython-311.pyc
+³           
+ÀÄÄÄtests
+        test_app.py
+        test_baseline.py
+        test_data_handler.py
+        test_main.py
+        test_processor.py
+        test_raw_data.py
+        __init__.py
+        

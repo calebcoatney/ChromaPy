@@ -36,116 +36,54 @@ class Processor:
 
         return compound
 
-    def find_baseline(self, y, x, preprocessing_parameters: dict):
-        baseline_distance = preprocessing_parameters['baseline'].get('distance')
+    def dpa_baseline(self, x, y, preprocessing_parameters):
+        """
+        Performs a derivative-based accumulation operation and baseline estimation in one function.
 
-        # Calculate baseline
-        baseline_prominence = np.abs(np.max(-y) - np.median(y)) / preprocessing_parameters['baseline'].get(
-            'prominence') or np.abs(np.max(-y) - np.median(y)) / 50
-        baseline, _ = scipy.signal.find_peaks(
-            -y, distance=baseline_distance, prominence=(None, baseline_prominence))
-        baseline_x = x[baseline]
-        baseline_y = y[baseline]
+        Args:
+            x (array): x-values of the signal.
+            y (array): y-values of the signal.
+            preprocessing_parameters (dict): Dictionary containing parameters for 'window' and 'threshold'.
 
-        tck = splrep(baseline_x, baseline_y)
+        Returns:
+            array: Estimated baseline values for y.
+        """
+        # Retrieve parameters
+        window = preprocessing_parameters['baseline']['window']
+
+        # Calculate the derivative trace
+        d = [(y[k + 1] - y[k]) / (x[k + 1] - x[k]) for k in range(len(x) - 1)]
+
+        # Split d into positive (P) and negative (N) components
+        P = [dk if dk >= 0 else 0 for dk in d] + [0]
+        N = [dk if dk <= 0 else 0 for dk in d] + [0]
+
+        # Initialize accumulation array
+        alpha = np.zeros(len(x))
+        for i in range(len(x)):
+            for j in range(window + 1):
+                if i - j >= 0 and i + j < len(x):
+                    alpha[i] += P[i - j] - N[i + j]
+        alpha /= window  # Normalize by width
+
+        percentile = preprocessing_parameters['baseline']['threshold']
+        threshold = np.percentile(alpha, percentile)
+
+        # Identify baseline points using threshold
+        baseline_points = [(xi, yi) for xi, yi, a in zip(x, y, alpha) if a < threshold]
+
+        if not baseline_points:  # Handle empty baseline points case
+            return np.zeros(len(y))
+
+        # Fit spline to baseline points
+        baseline_x, baseline_y = zip(*baseline_points)
+        tck = splrep(baseline_x, baseline_y, k=2)
         baseline_y = splev(x, tck)
+
+        # Ensure baseline does not exceed the signal
         baseline_y = np.where(baseline_y > y, y, baseline_y)
 
         return baseline_y
-
-    def get_baseline_limits(self, raw_data: RawData, preprocessing_parameters: dict, verbose: bool = False):
-        x = raw_data.time_values
-        y = raw_data.signal_values
-
-        # Apply smoothing if specified
-        if "smoothing" in preprocessing_parameters and preprocessing_parameters["smoothing"].get('is_smooth'):
-            kernel_size = int(preprocessing_parameters["smoothing"].get(
-                "kernel_size")) * 2 + 1  # must be odd
-            window_length = int(preprocessing_parameters["smoothing"].get("window_length"))
-            if verbose:
-                print(
-                    f"Smoothing enabled with kernel_size={kernel_size}, window_length={window_length}")
-            y = self.smooth(y, kernel_size, window_length)
-
-        # Calculate baseline prominence
-        baseline_prominence = np.abs(np.max(-y) - np.median(y)) / preprocessing_parameters['baseline'].get(
-            'prominence') or np.abs(np.max(-y) - np.median(y)) / 50
-        if verbose:
-            print(f"Calculated baseline prominence: {baseline_prominence}")
-
-        min_distance = 1
-        max_distance = preprocessing_parameters['baseline']['distance'] or len(
-            x) // 5
-        increment = len(x) // 100
-
-        # Single attempt to find peaks at the initial max_distance
-        try:
-            if verbose:
-                print(
-                    f'Trying baseline detection at initial max_distance={max_distance}')
-            baseline, _ = scipy.signal.find_peaks(
-                -y, distance=max_distance, prominence=(None, baseline_prominence))
-            baseline_x = x[baseline]
-            baseline_y = y[baseline]
-
-            if len(baseline) < 5:
-                raise Exception
-
-            # Perform spline interpolation once
-            tck = splrep(baseline_x, baseline_y)
-            if verbose:
-                print(f'k={tck[-1]}, m={len(baseline)}')
-            baseline_y = splev(x, tck)
-            baseline_y = np.minimum(baseline_y, y)
-
-        except Exception as e:
-            if verbose:
-                print(
-                    f"Error finding baseline at initial max_distance={max_distance}: {e}")
-            max_distance = len(x) // 100
-            # return (min_distance, max_distance)  # Early return on failure
-
-        # Increment max_distance to find the best peaks
-        while max_distance < len(x):
-            max_distance += increment
-            if verbose:
-                print(f'Increasing max distance: {max_distance}')
-            try:
-                baseline, _ = scipy.signal.find_peaks(
-                    -y, distance=max_distance, prominence=(None, baseline_prominence))
-                baseline_x = x[baseline]
-                baseline_y = y[baseline]
-
-                if len(baseline) < 5:
-                    raise Exception
-
-                # Perform spline interpolation once
-                tck = splrep(baseline_x, baseline_y)
-                if verbose:
-                    print(f'k={tck[-1]}, m={len(baseline)}')
-                baseline_y = splev(x, tck)
-                baseline_y = np.minimum(baseline_y, y)
-            except Exception as e:
-                if verbose:
-                    print(
-                        f"Error interpolating baseline at max_distance={max_distance}: {e}")
-                max_distance -= increment
-                break
-
-        if verbose:
-            print(
-                f"Returning baseline limits: min_distance={min_distance}, max_distance={max_distance}")
-        return (min_distance, max_distance)
-
-    def find_peaks(self, y, x, params):
-        peak_prominence = params.get('peak_prominence')
-
-        # Find peaks
-        peaks, _ = scipy.signal.find_peaks(y, prominence=peak_prominence)
-        peaks_x = x[peaks]
-        peaks_y = y[peaks]
-
-        return peaks_x, peaks_y
 
     def get_max_peak_prominence(self, raw_data: RawData):
         y = raw_data.signal_values
@@ -199,37 +137,14 @@ class Processor:
         results['x'] = x
         results['y'] = y
 
-        # Extract baseline parameters
-        if "baseline" in preprocessing_parameters:
-            baseline_distance = preprocessing_parameters["baseline"].get(
-                "distance")
-            baseline_prominence = np.abs(np.max(-y) - np.median(y)) / preprocessing_parameters['baseline'].get(
-                'prominence') or np.abs(np.max(-y) - np.median(y)) / 50
-            baseline, _ = scipy.signal.find_peaks(
-                -y, distance=baseline_distance, prominence=(None, baseline_prominence))
-            baseline_x = x[baseline]
-            baseline_y = y[baseline]
+        baseline_y = self.dpa_baseline(x, y, preprocessing_parameters)
+        results['baseline_y'] = baseline_y
 
-            try:
-                tck = splrep(baseline_x, baseline_y)
-                # print(f'k={tck[-1]}, m={len(baseline)}')
-                baseline_y = splev(x, tck)
-                baseline_y = np.minimum(baseline_y, y)
-                results['baseline_y'] = baseline_y
-
-                if preprocessing_parameters["baseline"].get('is_baseline_corrected'):
-                    y -= baseline_y
-                    baseline_y -= baseline_y
-                    results['y'] = y
-                    results['baseline_y'] = baseline_y
-
-            except Exception as e:
-                print(f'Error while preprocessing sample:\n{raw_data}\n{e}')
-                print(
-                    f'Smoothing enabled?: {preprocessing_parameters["smoothing"].get("is_smooth")}')
-                print(
-                    f'Tried to use baseline_distance={baseline_distance} with baseline_prominence={baseline_prominence}')
-                print(f'Baseline found with this distance: {baseline}')
+        if preprocessing_parameters["baseline"].get('is_baseline_corrected'):
+            y -= baseline_y
+            baseline_y -= baseline_y
+            results['y'] = y
+            results['baseline_y'] = baseline_y
 
         # Extract peak parameters
         if "peak" in preprocessing_parameters:
@@ -269,9 +184,10 @@ class Processor:
 
         return results
 
-    def integrate(self, raw_data: RawData, preprocessing_parameters: dict, chemstation_area_factor: float = 588, verbose: bool = True):
+    def integrate(self, raw_data: RawData, preprocessing_parameters: dict, chemstation_area_factor: float = 580, verbose: bool = True):
         # Preprocess the raw data using the provided parameters
         preprocessed_data = self.preprocess(raw_data, preprocessing_parameters)
+        criteria = ['threshold', 'minimum']
 
         if "RT Table" in preprocessing_parameters:
             rt_table = preprocessing_parameters.get("RT Table")
@@ -298,17 +214,40 @@ class Processor:
             peak_idx = np.where(x == apex_x)[0][0]
             baseline_at_apex = baseline_y[peak_idx]
 
-            # Calculate vertical distance between apex and baseline
-            vertical_distance = apex_y - baseline_at_apex
-            threshold = vertical_distance * 0.0025  # 0.25% threshold for signal proximity to baseline
-
             # Initialize left and right bounds based on peak apex
             left_bound = peak_idx
             right_bound = peak_idx
 
+            # Define the range for min_left and min_right calculations
+            if i > 0:  # If not the first peak
+                # Find the index of the previous peak's x value in the x array
+                start_idx = np.where(x == peaks_x[i - 1]
+                                     )[0][0] if np.any(x == peaks_x[i - 1]) else None
+                if start_idx is not None:
+                    min_left = start_idx + np.argmin(y[start_idx:peak_idx])
+                else:
+                    min_left = 0
+            else:
+                min_left = 0
+
+            if i < len(peaks_x) - 1:  # If not the last peak
+                # Find the index of the next peak's x value in the x array
+                end_idx = np.where(x == peaks_x[i + 1]
+                                   )[0][0] if np.any(x == peaks_x[i + 1]) else None
+                if end_idx is not None:
+                    min_right = peak_idx + np.argmin(y[peak_idx:end_idx])
+                else:
+                    min_right = -1
+            else:
+                min_right = -1
+
+            # Calculate vertical distance between apex and baseline
+            vertical_distance = apex_y - np.minimum(y[min_left], y[min_right])
+            threshold = vertical_distance * 0.0025  # 0.25% threshold for signal proximity to baseline
+
             dx = 25
 
-            # Calculate the left bound using both threshold and slope sign changes with foward difference approximation
+            # Calculate the left bound using the specified criteria
             previous_slope = None
             for j in range(peak_idx, 2, -1):
                 diff = y[j] - baseline_y[j]
@@ -320,14 +259,22 @@ class Processor:
                     # Edge case fallback to first-order difference
                     slope = (y[j] - y[j - 1]) / (x[j] - x[j - 1])
 
-                # Check for either diff threshold or slope zero-crossing
-                if diff <= threshold or (previous_slope is not None and np.sign(slope) != np.sign(previous_slope)):
+                # Check based on provided criteria
+                if 'threshold' in criteria and diff <= threshold:
+                    left_bound = j
+                    break
+
+                if 'minimum' in criteria and j == min_left:
+                    left_bound = j
+                    break
+
+                if 'slope' in criteria and previous_slope is not None and np.sign(slope) != np.sign(previous_slope):
                     left_bound = j
                     break
 
                 previous_slope = slope
 
-            # Calculate the right bound similarly with forward difference approximation
+            # Calculate the right bound similarly
             previous_slope = None
             for j in range(peak_idx, len(y) - 3):
                 diff = y[j] - baseline_y[j]
@@ -339,8 +286,16 @@ class Processor:
                     # Edge case fallback to first-order difference
                     slope = (y[j + 1] - y[j]) / (x[j + 1] - x[j])
 
-                # Check for either diff threshold or slope zero-crossing
-                if diff <= threshold or (previous_slope is not None and np.sign(slope) != np.sign(previous_slope)):
+                # Check based on provided criteria
+                if 'threshold' in criteria and diff <= threshold:
+                    right_bound = j
+                    break
+
+                if 'minimum' in criteria and j == min_right:
+                    right_bound = j
+                    break
+
+                if 'slope' in criteria and previous_slope is not None and np.sign(slope) != np.sign(previous_slope):
                     right_bound = j
                     break
 

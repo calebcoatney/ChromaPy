@@ -72,7 +72,6 @@ class ExportDataDialog(ctk.CTkToplevel):
             tk.messagebox.showinfo(f'File type "{self.file_type_var.get()}" is not supported')
 
         tk.messagebox.showinfo("Success", "Data exported successfully!")
-        self.quit()
         self.destroy()  # Close the dialog after exporting
 
     def export_to_csv(self, data: dict):

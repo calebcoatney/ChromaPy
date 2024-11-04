@@ -58,6 +58,8 @@ class RawData:
             detector = 'TCD2B'
         elif 'TCD3C' in self.signal:
             detector = 'TCD3C'
+        elif 'TCD1B' in self.signal:
+            detector = 'TCD1B'
 
         if detector:
             return detector
